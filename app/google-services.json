@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "484530452726",
+    "project_id": "gestiongastosapp-c4a10",
+    "storage_bucket": "gestiongastosapp-c4a10.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:484530452726:android:626713f70a8fc5ea9f14d7",
+        "android_client_info": {
+          "package_name": "com.dam2jms.gestiongastosapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "484530452726-ro851k6ls4itdkee7ttlrjlvuvcbdmip.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.dam2jms.gestiongastosapp",
+            "certificate_hash": "eff33116f6d23b00f0012c3694ff7c4c121f5dd7"
+          }
+        },
+        {
+          "client_id": "484530452726-0qsqchbvv2idp9vln7kfgebmf1gr1vhg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7Gw6rSYIWUmfzQpuw3QPbi1RcxZ6FpSo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "484530452726-0qsqchbvv2idp9vln7kfgebmf1gr1vhg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
