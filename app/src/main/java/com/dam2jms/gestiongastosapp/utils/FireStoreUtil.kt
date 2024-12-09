@@ -1,6 +1,8 @@
 package com.dam2jms.gestiongastosapp.utils
 
 import android.util.Log
+import com.dam2jms.gestiongastosapp.states.BudgetState
+import com.dam2jms.gestiongastosapp.states.FinancialGoalState
 import com.dam2jms.gestiongastosapp.states.TransactionUiState
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -15,7 +17,10 @@ object FireStoreUtil {
     private val db = FirebaseFirestore.getInstance()
 
     // Método para obtener transacciones
-    fun obtenerTransacciones(onSuccess: (List<TransactionUiState>) -> Unit, onFailure: (Exception) -> Unit) {
+    fun obtenerTransacciones(
+        onSuccess: (List<TransactionUiState>) -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
         val userId = Firebase.auth.currentUser?.uid ?: return
         db.collection("users")
             .document(userId)
@@ -43,7 +48,12 @@ object FireStoreUtil {
     }
 
     // Método para añadir una transacción
-    fun añadirTransaccion(coleccion: String, transaccion: TransactionUiState, onSuccess: () -> Unit, onFailure: (Exception) -> Unit) {
+    fun añadirTransaccion(
+        coleccion: String,
+        transaccion: TransactionUiState,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
         val userId = Firebase.auth.currentUser?.uid ?: return
         db.collection("users")
             .document(userId)
@@ -59,7 +69,12 @@ object FireStoreUtil {
     }
 
     // Método para eliminar una transacción
-    fun eliminarTransaccion(coleccion: String, transaccionId: String, onSuccess: () -> Unit, onFailure: (Exception) -> Unit) {
+    fun eliminarTransaccion(
+        coleccion: String,
+        transaccionId: String,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
         val userId = Firebase.auth.currentUser?.uid ?: return
         db.collection("users")
             .document(userId)
@@ -71,7 +86,12 @@ object FireStoreUtil {
     }
 
     // Método para editar una transacción
-    fun editarTransaccion(coleccion: String, transaccion: TransactionUiState, onSuccess: () -> Unit, onFailure: (Exception) -> Unit) {
+    fun editarTransaccion(
+        coleccion: String,
+        transaccion: TransactionUiState,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
         val userId = Firebase.auth.currentUser?.uid ?: return
         if (transaccion.id!!.isEmpty()) {
             onFailure(Exception("El ID de la transacción no puede estar vacío."))
@@ -133,6 +153,196 @@ object FireStoreUtil {
             .addOnFailureListener { onFailure(it) }
     }
 
+    // New method to create or update a financial goal
+    fun setFinancialGoal(
+        goal: FinancialGoalState,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        val userId = Firebase.auth.currentUser?.uid ?: return
+
+        val goalDocument = hashMapOf(
+            "targetAmount" to goal.targetAmount,
+            "currentAmount" to goal.currentAmount,
+            "startDate" to goal.startDate,
+            "endDate" to goal.endDate,
+            "goalName" to goal.goalName,
+            "goalCategory" to goal.goalCategory,
+            "progress" to goal.progress
+        )
+
+        db.collection("users")
+            .document(userId)
+            .collection("financialGoals")
+            .document(goal.id ?: UUID.randomUUID().toString())
+            .set(goalDocument)
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { exception ->
+                onFailure(exception)
+            }
+    }
+
+    // Method to retrieve financial goals
+    fun getFinancialGoals(
+        onSuccess: (List<FinancialGoalState>) -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        val userId = Firebase.auth.currentUser?.uid ?: return
+
+        db.collection("users")
+            .document(userId)
+            .collection("financialGoals")
+            .get()
+            .addOnSuccessListener { querySnapshot ->
+                val goals = querySnapshot.documents.mapNotNull { document ->
+                    FinancialGoalState(
+                        id = document.id,
+                        targetAmount = document.getDouble("targetAmount") ?: 0.0,
+                        currentAmount = document.getDouble("currentAmount") ?: 0.0,
+                        startDate = document.getString("startDate") ?: "",
+                        endDate = document.getString("endDate") ?: "",
+                        goalName = document.getString("goalName") ?: "",
+                        goalCategory = document.getString("goalCategory") ?: "",
+                        progress = document.getDouble("progress") ?: 0.0
+                    )
+                }
+                onSuccess(goals)
+            }
+            .addOnFailureListener { exception ->
+                onFailure(exception)
+            }
+    }
+
+    // Method to create or update a budget
+    fun setBudget(
+        budget: BudgetState,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        val userId = Firebase.auth.currentUser?.uid ?: return
+
+        val budgetDocument = hashMapOf(
+            "category" to budget.category,
+            "budgetAmount" to budget.budgetAmount,
+            "currentSpent" to budget.currentSpent,
+            "startDate" to budget.startDate,
+            "endDate" to budget.endDate,
+            "remainingAmount" to (budget.budgetAmount - budget.currentSpent)
+        )
+
+        db.collection("users")
+            .document(userId)
+            .collection("budgets")
+            .document(budget.id ?: UUID.randomUUID().toString())
+            .set(budgetDocument)
+            .addOnSuccessListener {
+                onSuccess()
+            }
+            .addOnFailureListener { exception ->
+                onFailure(exception)
+            }
+    }
+
+    // Method to retrieve budgets
+    fun getBudgets(
+        onSuccess: (List<BudgetState>) -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        val userId = Firebase.auth.currentUser?.uid ?: return
+
+        db.collection("users")
+            .document(userId)
+            .collection("budgets")
+            .get()
+            .addOnSuccessListener { querySnapshot ->
+                val budgets = querySnapshot.documents.mapNotNull { document ->
+                    BudgetState(
+                        id = document.id,
+                        category = document.getString("category") ?: "",
+                        budgetAmount = document.getDouble("budgetAmount") ?: 0.0,
+                        currentSpent = document.getDouble("currentSpent") ?: 0.0,
+                        startDate = document.getString("startDate") ?: "",
+                        endDate = document.getString("endDate") ?: "",
+                        remainingAmount = document.getDouble("remainingAmount") ?: 0.0
+                    )
+                }
+                onSuccess(budgets)
+            }
+            .addOnFailureListener { exception ->
+                onFailure(exception)
+            }
+    }
+
+    // Method to update budget when a transaction is added
+    fun updateBudgetOnTransaction(
+        category: String,
+        amount: Double,
+        onSuccess: () -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        val userId = Firebase.auth.currentUser?.uid ?: return
+
+        // Find the budget for the specific category
+        db.collection("users")
+            .document(userId)
+            .collection("budgets")
+            .whereEqualTo("category", category)
+            .get()
+            .addOnSuccessListener { querySnapshot ->
+                if (!querySnapshot.isEmpty) {
+                    val budgetDocument = querySnapshot.documents.first()
+                    val currentSpent = budgetDocument.getDouble("currentSpent") ?: 0.0
+                    val budgetAmount = budgetDocument.getDouble("budgetAmount") ?: 0.0
+
+                    val updatedSpent = currentSpent + amount
+                    val remainingAmount = budgetAmount - updatedSpent
+
+                    budgetDocument.reference.update(
+                        mapOf(
+                            "currentSpent" to updatedSpent,
+                            "remainingAmount" to remainingAmount
+                        )
+                    )
+                        .addOnSuccessListener { onSuccess() }
+                        .addOnFailureListener { onFailure(it) }
+                } else {
+                    onFailure(Exception("No budget found for category"))
+                }
+            }
+            .addOnFailureListener { onFailure(it) }
+    }
+
+    // Method to calculate total savings and progress towards financial goals
+    fun calculateFinancialProgress(
+        onSuccess: (Double, Double, List<FinancialGoalState>) -> Unit,
+        onFailure: (Exception) -> Unit
+    ) {
+        val userId = Firebase.auth.currentUser?.uid ?: return
+
+        // First, get all transactions
+        obtenerTransacciones(
+            onSuccess = { transactions ->
+                // Calculate total income and expenses
+                val totalIncome = transactions.filter { it.tipo == "ingreso" }.sumByDouble { it.cantidad }
+                val totalExpenses = transactions.filter { it.tipo == "gasto" }.sumByDouble { it.cantidad }
+                val totalSavings = totalIncome - totalExpenses
+
+                // Get financial goals
+                getFinancialGoals(
+                    onSuccess = { goals ->
+                        // Calculate overall goal progress
+                        val totalGoalProgress = goals.sumByDouble { it.progress }
+                        onSuccess(totalSavings, totalGoalProgress, goals)
+                    },
+                    onFailure = onFailure
+                )
+            },
+            onFailure = onFailure
+        )
+    }
+
     // Método para obtener transacciones por rango de fechas
     suspend fun obtenerTransaccionesPorRango(
         fechaInicio: LocalDate,
@@ -177,17 +387,6 @@ object FireStoreUtil {
         }
     }
 
-    // Método para obtener transacciones por mes
-    suspend fun obtenerTransaccionesPorMes(año: Int, mes: Int): List<TransactionUiState> {
-        val userId = Firebase.auth.currentUser?.uid
-            ?: throw Exception("Usuario no autenticado")
-
-        val fechaInicio = LocalDate.of(año, mes, 1)
-        val fechaFin = fechaInicio.withDayOfMonth(fechaInicio.lengthOfMonth())
-
-        return obtenerTransaccionesPorRango(fechaInicio, fechaFin)
-    }
-
     // Método para obtener transacciones de los últimos meses
     suspend fun obtenerTransaccionesUltimosPeriodo(meses: Int): List<TransactionUiState> {
         val userId = Firebase.auth.currentUser?.uid
@@ -199,142 +398,4 @@ object FireStoreUtil {
         return obtenerTransaccionesPorRango(fechaInicio, fechaFin)
     }
 
-    // Método para obtener balance total
-    suspend fun obtenerBalanceTotal(): Double {
-        val userId = Firebase.auth.currentUser?.uid
-            ?: throw Exception("Usuario no autenticado")
-
-        val transacciones = try {
-            obtenerTransaccionesPorRango(LocalDate.MIN, LocalDate.now())
-        } catch (e: Exception) {
-            emptyList()
-        }
-
-        val totalIngresos = transacciones
-            .filter { it.tipo == "ingreso" }
-            .sumByDouble { it.cantidad }
-
-        val totalGastos = transacciones
-            .filter { it.tipo == "gasto" }
-            .sumByDouble { it.cantidad }
-
-        return totalIngresos - totalGastos
-    }
-
-    // Método para obtener gastos por categoría en un rango de fechas
-    suspend fun obtenerGastosPorCategoria(
-        fechaInicio: LocalDate,
-        fechaFin: LocalDate
-    ): Map<String, Double> {
-        val transacciones = obtenerTransaccionesPorRango(fechaInicio, fechaFin)
-
-        return transacciones
-            .filter { it.tipo == "gasto" }
-            .groupBy { it.categoria }
-            .mapValues { (_, transaccionesPorCategoria) ->
-                transaccionesPorCategoria.sumByDouble { it.cantidad }
-            }
-    }
-
-    // Métodos para gestión de metas financieras
-    fun guardarMetaFinanciera(
-        metaFinanciera: Double,
-        fechaMeta: LocalDate,
-        onSuccess: () -> Unit,
-        onFailure: (Exception) -> Unit
-    ) {
-        val userId = Firebase.auth.currentUser?.uid ?: return
-
-        val userRef = db.collection("users").document(userId)
-
-        val diasHastaMeta = LocalDate.now().until(fechaMeta).days
-        val ahorroDiarioNecesario = if (diasHastaMeta > 0) metaFinanciera / diasHastaMeta else 0.0
-
-        val metaData = hashMapOf(
-            "metaFinanciera" to metaFinanciera,
-            "fechaMeta" to fechaMeta.toString(),
-            "diasHastaMeta" to diasHastaMeta,
-            "ahorroDiarioNecesario" to ahorroDiarioNecesario,
-            "progresoMeta" to 0.0,
-            "financialGoalId" to UUID.randomUUID().toString()
-        )
-
-        userRef.update(metaData as Map<String, Any>)
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onFailure(it) }
-    }
-
-    // Método para eliminar meta financiera
-    fun eliminarMetaFinanciera(
-        onSuccess: () -> Unit,
-        onFailure: (Exception) -> Unit
-    ) {
-        val userId = Firebase.auth.currentUser?.uid ?: return
-        val userRef = db.collection("users").document(userId)
-
-        val defaultMetaData = hashMapOf(
-            "metaFinanciera" to 0.0,
-            "fechaMeta" to null,
-            "diasHastaMeta" to -1,
-            "ahorroDiarioNecesario" to 0.0,
-            "progresoMeta" to 0.0,
-            "financialGoalId" to ""
-        )
-
-        userRef.update(defaultMetaData as Map<String, Any>)
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onFailure(it) }
-    }
-
-    // Método para actualizar progreso de meta financiera
-    fun actualizarProgresoMeta(
-        progresoActual: Double,
-        onSuccess: () -> Unit,
-        onFailure: (Exception) -> Unit
-    ) {
-        val userId = Firebase.auth.currentUser?.uid ?: return
-        val userRef = db.collection("users").document(userId)
-
-        userRef.update("progresoMeta", progresoActual)
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onFailure(it) }
-    }
-
-    // Método para obtener estadísticas financieras
-    suspend fun obtenerEstadisticasFinancieras(): Map<String, Any> {
-        val userId = Firebase.auth.currentUser?.uid
-            ?: throw Exception("Usuario no autenticado")
-
-        // Obtener transacciones del mes actual
-        val fechaActual = LocalDate.now()
-        val transaccionesMesActual = obtenerTransaccionesPorMes(fechaActual.year, fechaActual.monthValue)
-
-        // Calcular totales
-        val totalIngresosMes = transaccionesMesActual
-            .filter { it.tipo == "ingreso" }
-            .sumByDouble { it.cantidad }
-
-        val totalGastosMes = transaccionesMesActual
-            .filter { it.tipo == "gasto" }
-            .sumByDouble { it.cantidad }
-
-        // Obtener categorías de gastos más frecuentes
-        val categoriasGastos = transaccionesMesActual
-            .filter { it.tipo == "gasto" }
-            .groupBy { it.categoria }
-            .mapValues { (_, transacciones) ->
-                transacciones.sumByDouble { it.cantidad }
-            }
-            .toList()
-            .sortedByDescending { (_, total) -> total }
-            .take(3)
-            .toMap()
-
-        return mapOf(
-            "totalIngresosMes" to totalIngresosMes,
-            "totalGastosMes" to totalGastosMes,
-            "balanceMes" to (totalIngresosMes - totalGastosMes),
-            "categoriasGastosPrincipales" to categoriasGastos
-        )
-    }
 }

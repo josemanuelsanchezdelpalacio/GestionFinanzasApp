@@ -1,11 +1,12 @@
 package com.dam2jms.gestiongastosapp.screens
 
 import ItemComponents.SelectorCategoria
-import android.content.Context
 import android.os.Build
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,22 +18,27 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.dam2jms.gestiongastosapp.components.BottomAppBarReutilizable
 import com.dam2jms.gestiongastosapp.components.DatePickerComponents.showDatePicker
 import com.dam2jms.gestiongastosapp.data.Categoria
 import com.dam2jms.gestiongastosapp.data.CategoriaAPI
+import com.dam2jms.gestiongastosapp.data.obtenerIconoCategoria
 import com.dam2jms.gestiongastosapp.models.AddTransactionViewModel
 import com.dam2jms.gestiongastosapp.models.AuxViewModel
-import com.dam2jms.gestiongastosapp.models.FinancialReportState
 import com.dam2jms.gestiongastosapp.navigation.AppScreen
+import com.dam2jms.gestiongastosapp.states.BudgetState
+import com.dam2jms.gestiongastosapp.states.FinancialGoalState
 import com.dam2jms.gestiongastosapp.states.UiState
 import com.dam2jms.gestiongastosapp.ui.theme.*
 import kotlinx.coroutines.launch
@@ -47,17 +53,19 @@ fun AddTransactionScreen(
     auxViewModel: AuxViewModel,
     mvvm: AddTransactionViewModel
 ) {
-    val scope = rememberCoroutineScope()
     val uiState by mvvm.uiState.collectAsState()
-    val reportState by mvvm.reportState.collectAsState()
+    val financialGoalState by mvvm.financialGoalState.collectAsState()
+    val budgetState by mvvm.budgetState.collectAsState()
+    val financialProgressState by mvvm.financialProgressState.collectAsState()
+    val errorState by mvvm.errorState.collectAsState()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     // Fecha por defecto
     var seleccionarFecha by remember { mutableStateOf(LocalDate.now()) }
 
-    // Estado para diálogos
-    var showReportDialog by remember { mutableStateOf(false) }
-    var showForecastDialog by remember { mutableStateOf(false) }
-    var forecastState by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    // Estado para controlar la pestaña activa
+    var activeTab by remember { mutableStateOf(0) }
 
     // Categorías
     var categorias by remember { mutableStateOf<List<Categoria>>(emptyList()) }
@@ -67,12 +75,21 @@ fun AddTransactionScreen(
         categorias = CategoriaAPI.obtenerCategorias(uiState.tipo)
     }
 
+    // Manejo de errores
+    errorState?.let { error ->
+        LaunchedEffect(error) {
+            // Mostrar error de manera apropiada
+            Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+            mvvm.clearErrorState()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "AÑADIR TRANSACCION",
+                        "GESTIÓN FINANCIERA",
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontWeight = FontWeight.Bold,
                             color = blanco
@@ -84,32 +101,6 @@ fun AddTransactionScreen(
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBackIos, "atras", tint = blanco)
-                    }
-                },
-                actions = {
-                    // Botones de informe y predicción en la barra de acciones
-                    IconButton(
-                        onClick = {
-                            scope.launch {
-                                mvvm.generarInformeMensual(
-                                    LocalDate.now().year,
-                                    LocalDate.now().monthValue
-                                )
-                                showReportDialog = true
-                            }
-                        }
-                    ) {
-                        Icon(Icons.Default.Analytics, contentDescription = "Informe Mensual", tint = blanco)
-                    }
-                    IconButton(
-                        onClick = {
-                            scope.launch {
-                                forecastState = mvvm.predecirGastosFuturos(6)
-                                showForecastDialog = true
-                            }
-                        }
-                    ) {
-                        Icon(Icons.Default.BatchPrediction, contentDescription = "Predicción Gastos", tint = blanco)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = colorFondo)
@@ -126,7 +117,6 @@ fun AddTransactionScreen(
         },
         containerColor = colorFondo
     ) { paddingValues ->
-        // Contenido principal
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -136,260 +126,439 @@ fun AddTransactionScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Tarjeta principal de transacción
-            AddTransactionCard(
-                uiState = uiState,
-                mvvm = mvvm,
-                seleccionarFecha = seleccionarFecha,
-                categorias = categorias,
-                onFechaChange = { newDate -> seleccionarFecha = newDate }
-            )
+            // Tabs para diferentes secciones
+            TabRow(
+                selectedTabIndex = activeTab,
+                containerColor = colorFondo,
+                contentColor = blanco
+            ) {
+                Tab(
+                    selected = activeTab == 0,
+                    onClick = { activeTab = 0 },
+                    text = { Text("Transacción") }
+                )
+                Tab(
+                    selected = activeTab == 1,
+                    onClick = { activeTab = 1 },
+                    text = { Text("Meta Financiera") }
+                )
+                Tab(
+                    selected = activeTab == 2,
+                    onClick = { activeTab = 2 },
+                    text = { Text("Presupuesto") }
+                )
+            }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Botón de añadir transacción
-            AddTransactionButton(
-                uiState = uiState,
-                mvvm = mvvm,
-                context = LocalContext.current,
-                navController = navController,
-                seleccionarFecha = seleccionarFecha
-            )
-        }
-
-        // Diálogo de Informe Mensual
-        if (showReportDialog) {
-            MonthlyReportDialog(
-                reportState = reportState,
-                onDismiss = { showReportDialog = false }
-            )
-        }
-
-        // Diálogo de Predicción de Gastos
-        if (showForecastDialog) {
-            ForecastDialog(
-                forecastState = forecastState,
-                onDismiss = { showForecastDialog = false }
-            )
+            // Contenido dinámico basado en la pestaña seleccionada
+            when (activeTab) {
+                0 -> AddTransactionCard(
+                    uiState = uiState,
+                    mvvm = mvvm,
+                    seleccionarFecha = seleccionarFecha,
+                    onDateChange = { seleccionarFecha = it },
+                    categorias = categorias
+                )
+                1 -> AddFinancialGoalCard(
+                    mvvm = mvvm,
+                    financialGoalState = financialGoalState,
+                    financialProgressState = financialProgressState
+                )
+                2 -> AddBudgetCard(
+                    mvvm = mvvm,
+                    budgetStates = budgetState
+                )
+            }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTransactionCard(
     uiState: UiState,
     mvvm: AddTransactionViewModel,
     seleccionarFecha: LocalDate,
-    categorias: List<Categoria>,
-    onFechaChange: (LocalDate) -> Unit
+    onDateChange: (LocalDate) -> Unit,
+    categorias: List<Categoria>
 ) {
     val context = LocalContext.current
-
-    val categoriaSeleccionada: (String) -> Unit = { categoria ->
-        mvvm.actualizarDatosTransaccion(uiState.cantidad.toString(), categoria, uiState.tipo)
-    }
+    var amount by remember { mutableStateOf(uiState.cantidad?.toString() ?: "") }
+    var selectedCategory by remember { mutableStateOf(uiState.categoria) }
+    var transactionType by remember { mutableStateOf(uiState.tipo) }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
-            .shadow(6.dp, RoundedCornerShape(18.dp)),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = colorFondo),
-        border = BorderStroke(2.dp, naranjaClaro)
+            .shadow(8.dp, shape = RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = blanco),
+        shape = RoundedCornerShape(16.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Botones de tipo de transacción
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Tipo de Transacción
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Button(
                     onClick = {
-                        mvvm.actualizarDatosTransaccion(
-                            uiState.cantidad.toString(),
-                            uiState.categoria,
-                            "ingreso"
-                        )
+                        transactionType = "ingreso"
+                        mvvm.updateTransactionData(amount, selectedCategory, "ingreso")
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = verde),
-                    modifier = Modifier.weight(1f)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (transactionType == "ingreso") naranjaClaro else Color.Gray
+                    ),
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
                 ) {
-                    Icon(Icons.Default.TrendingUp, "Ingreso")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Ingreso", color = blanco)
+                    Text("Ingreso")
                 }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
                 Button(
                     onClick = {
-                        mvvm.actualizarDatosTransaccion(
-                            uiState.cantidad.toString(),
-                            uiState.categoria,
-                            "gasto"
-                        )
+                        transactionType = "gasto"
+                        mvvm.updateTransactionData(amount, selectedCategory, "gasto")
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = rojo),
-                    modifier = Modifier.weight(1f)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (transactionType == "gasto") naranjaClaro else Color.Gray
+                    ),
+                    modifier = Modifier.weight(1f).padding(start = 8.dp)
                 ) {
-                    Icon(Icons.Default.TrendingDown, "Gasto")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Gasto", color = blanco)
+                    Text("Gasto")
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Campo de Cantidad
-            Text("Cantidad", color = grisClaro, style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(8.dp))
+            // Monto
             OutlinedTextField(
-                value = uiState.cantidad.toString(),
-                onValueChange = { nuevaCantidad ->
-                    mvvm.actualizarDatosTransaccion(
-                        nuevaCantidad,
-                        uiState.categoria,
-                        uiState.tipo
-                    )
+                value = amount,
+                onValueChange = {
+                    amount = it
+                    mvvm.updateTransactionData(it, selectedCategory, transactionType)
                 },
+                label = { Text("Monto") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                leadingIcon = {
-                    Icon(
-                        Icons.Filled.AttachMoney,
-                        "Cantidad",
-                        tint = if (uiState.tipo == "ingreso") verde else rojo
-                    )
-                },
-                textStyle = TextStyle(blanco),
                 modifier = Modifier.fillMaxWidth(),
-                colors = TextFieldDefaults.outlinedTextFieldColors(
-                    focusedBorderColor = if (uiState.tipo == "ingreso") verde else rojo,
-                    unfocusedBorderColor = grisClaro
-                )
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = "Monto") }
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Fecha
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(colorFondo)
+                    .clickable {
+                        // Pass the current date as the initial date
+                        showDatePicker(context, seleccionarFecha) { selectedDate ->
+                            onDateChange(selectedDate)
+                        }
+                    }
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.CalendarToday, contentDescription = "Fecha")
+                Spacer(modifier = Modifier.width(16.dp))
+                Text(
+                    seleccionarFecha.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // Selector de Categoría
-            Text("Categoria", color = grisClaro, style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(8.dp))
             SelectorCategoria(
-                categorias = categorias,
-                categoriaSeleccionada = uiState.categoria,
-                onCategorySelected = categoriaSeleccionada,
-                tipo = uiState.tipo
+                categoriaSeleccionada = selectedCategory ?: "",
+                categorias = categorias.filter { it.tipo == transactionType },
+                onCategorySelected = { categoria ->
+                    selectedCategory = categoria
+                    mvvm.updateTransactionData(amount, categoria, transactionType)
+                },
+                tipo = transactionType
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Selector de Fecha
-            Text("Fecha", color = grisClaro, style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(
+            // Botón de Guardar
+            Button(
                 onClick = {
-                    showDatePicker(context, seleccionarFecha, onFechaChange)
+                    mvvm.addTransaction(context, seleccionarFecha) { route ->
+                        // Opcional: navegación después de agregar transacción
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = if (uiState.tipo == "ingreso") verde else rojo
-                ),
-                border = BorderStroke(1.dp, if (uiState.tipo == "ingreso") verde else rojo)
+                colors = ButtonDefaults.buttonColors(containerColor = naranjaClaro)
             ) {
-                Icon(Icons.Default.DateRange, contentDescription = "Seleccionar fecha")
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    seleccionarFecha.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-                    color = if (uiState.tipo == "ingreso") verde else rojo
-                )
+                Text("Guardar Transacción", style = TextStyle(fontSize = 16.sp))
             }
         }
     }
 }
 
 @Composable
-fun AddTransactionButton(
-    uiState: UiState,
+fun AddFinancialGoalCard(
     mvvm: AddTransactionViewModel,
-    context: Context,
-    navController: NavController,
-    seleccionarFecha: LocalDate
+    financialGoalState: List<FinancialGoalState>,
+    financialProgressState: Triple<Double, Double, List<FinancialGoalState>>
 ) {
-    Button(
-        onClick = {
-            mvvm.añadirTransaccion(context, seleccionarFecha) { route ->
-                navController.navigate(AppScreen.TransactionScreen.createRoute(route))
-            }
-        },
+    val context = LocalContext.current
+    var goalName by remember { mutableStateOf("") }
+    var targetAmount by remember { mutableStateOf("") }
+    var goalCategory by remember { mutableStateOf("") }
+    var startDate by remember { mutableStateOf(LocalDate.now()) }
+    var endDate by remember { mutableStateOf(LocalDate.now().plusMonths(6)) }
+
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (uiState.tipo == "ingreso") verde else rojo
-        ),
+            .shadow(8.dp, shape = RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = blanco),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Icon(Icons.Default.Add, "Añadir")
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "Añadir Transaccion",
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
-        )
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                "Crear Meta Financiera",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            // Nombre de la Meta
+            OutlinedTextField(
+                value = goalName,
+                onValueChange = { goalName = it },
+                label = { Text("Nombre de la Meta") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Monto Objetivo
+            OutlinedTextField(
+                value = targetAmount,
+                onValueChange = { targetAmount = it },
+                label = { Text("Monto Objetivo") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = "Monto") }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Categoría
+            OutlinedTextField(
+                value = goalCategory,
+                onValueChange = { goalCategory = it },
+                label = { Text("Categoría de la Meta") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Fechas
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Fecha de Inicio
+                Column(
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                ) {
+                    Text("Fecha de Inicio", style = MaterialTheme.typography.bodyMedium)
+                    Button(
+                        onClick = {
+                            showDatePicker(context, startDate) { selectedDate ->
+                                startDate = selectedDate
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(startDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")))
+                    }
+                }
+
+                // Fecha de Fin
+                Column(
+                    modifier = Modifier.weight(1f).padding(start = 8.dp)
+                ) {
+                    Text("Fecha de Fin", style = MaterialTheme.typography.bodyMedium)
+                    Button(
+                        onClick = {
+                            showDatePicker(context, endDate) { selectedDate ->
+                                endDate = selectedDate
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(endDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Botón de Guardar Meta Financiera
+            Button(
+                onClick = {
+                    val parsedTargetAmount = targetAmount.toDoubleOrNull()
+                    if (goalName.isNotEmpty() && parsedTargetAmount != null && parsedTargetAmount > 0 && goalCategory.isNotEmpty()) {
+                        mvvm.createFinancialGoal(
+                            context = context,
+                            goalName = goalName,
+                            targetAmount = parsedTargetAmount,
+                            goalCategory = goalCategory,
+                            startDate = startDate,
+                            endDate = endDate
+                        )
+                    } else {
+                        Toast.makeText(context, "Por favor, complete todos los campos correctamente", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = naranjaClaro)
+            ) {
+                Text("Guardar Meta Financiera", style = TextStyle(fontSize = 16.sp))
+            }
+        }
     }
 }
 
 @Composable
-fun MonthlyReportDialog(
-    reportState: FinancialReportState,
-    onDismiss: () -> Unit
+fun AddBudgetCard(
+    mvvm: AddTransactionViewModel,
+    budgetStates: List<BudgetState>
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Informe Financiero Mensual") },
-        text = {
-            Column {
-                Text("Total Ingresos: ${String.format("%.2f", reportState.totalIngresos)}")
-                Text("Total Gastos: ${String.format("%.2f", reportState.totalGastos)}")
-                Text("Balance: ${String.format("%.2f", reportState.balance)}")
+    val context = LocalContext.current
+    var budgetAmount by remember { mutableStateOf("") }
+    var budgetCategory by remember { mutableStateOf("") }
+    var startDate by remember { mutableStateOf(LocalDate.now()) }
+    var endDate by remember { mutableStateOf(LocalDate.now().plusMonths(1)) }
 
-                Spacer(modifier = Modifier.height(16.dp))
-                Text("Gastos por Categoría:", style = MaterialTheme.typography.titleMedium)
-                reportState.gastosPorCategoria.forEach { (categoria, monto) ->
-                    Text("$categoria: ${String.format("%.2f", monto)}")
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(8.dp, shape = RoundedCornerShape(16.dp)),
+        colors = CardDefaults.cardColors(containerColor = blanco),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(16.dp)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                "Crear Presupuesto",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+
+            // Monto del Presupuesto
+            OutlinedTextField(
+                value = budgetAmount,
+                onValueChange = { budgetAmount = it },
+                label = { Text("Monto del Presupuesto") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = "Monto") }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Categoría del Presupuesto
+            OutlinedTextField(
+                value = budgetCategory,
+                onValueChange = { budgetCategory = it },
+                label = { Text("Categoría del Presupuesto") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Fechas
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Fecha de Inicio
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
+                ) {
+                    Text("Fecha de Inicio", style = MaterialTheme.typography.bodyMedium)
+                    Button(
+                        onClick = {
+                            showDatePicker(context, startDate) { selectedDate ->
+                                startDate = selectedDate
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(startDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")))
+                    }
+                }
+
+                // Fecha de Fin
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 8.dp)
+                ) {
+                    Text("Fecha de Fin", style = MaterialTheme.typography.bodyMedium)
+                    Button(
+                        onClick = {
+                            showDatePicker(context, endDate) { selectedDate ->
+                                endDate = selectedDate
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(endDate.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")))
+                    }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cerrar")
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Botón de Guardar Presupuesto
+            Button(
+                onClick = {
+                    val parsedBudgetAmount = budgetAmount.toDoubleOrNull()
+                    if (budgetCategory.isNotEmpty() && parsedBudgetAmount != null && parsedBudgetAmount > 0) {
+                        mvvm.createBudget(
+                            context = context,
+                            category = budgetCategory,
+                            budgetAmount = parsedBudgetAmount,
+                            startDate = startDate,
+                            endDate = endDate
+                        )
+                    } else {
+                        Toast.makeText(context, "Por favor, complete todos los campos correctamente", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = naranjaClaro)
+            ) {
+                Text("Guardar Presupuesto", style = TextStyle(fontSize = 16.sp))
             }
         }
-    )
+    }
 }
-
-@Composable
-fun ForecastDialog(
-    forecastState: Map<String, Double>,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Predicción de Gastos Futuros") },
-        text = {
-            Column {
-                Text("Gastos Promedio Estimados por Categoría:")
-                forecastState.forEach { (categoria, monto) ->
-                    Text("$categoria: ${String.format("%.2f", monto)}")
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cerrar")
-            }
-        }
-    )
-}
-
-

@@ -7,27 +7,14 @@ import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.annotation.RequiresApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dam2jms.gestiongastosapp.states.BudgetState
+import com.dam2jms.gestiongastosapp.states.FinancialGoalState
 import com.dam2jms.gestiongastosapp.states.TransactionUiState
 import com.dam2jms.gestiongastosapp.states.UiState
-import com.dam2jms.gestiongastosapp.ui.theme.*
 import com.dam2jms.gestiongastosapp.utils.FireStoreUtil
-import com.patrykandpatrick.vico.core.extension.sumOf
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,47 +26,77 @@ import java.time.format.DateTimeFormatter
 @RequiresApi(Build.VERSION_CODES.O)
 class TransactionViewModel : ViewModel() {
 
-    //para controlar el estado de la UI
+    // State for UI
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    /**inicializo el viewmodel cargando las transacciones **/
+    // State for Financial Goals
+    private val _financialGoalState = MutableStateFlow<List<FinancialGoalState>>(emptyList())
+    val financialGoalState: StateFlow<List<FinancialGoalState>> = _financialGoalState.asStateFlow()
+
+    // State for Budgets
+    private val _budgetState = MutableStateFlow<List<BudgetState>>(emptyList())
+    val budgetState: StateFlow<List<BudgetState>> = _budgetState.asStateFlow()
+
+    // Initialize ViewModel and load data
     init {
-        cargarTransacciones()
+        loadTransactions()
+        loadFinancialGoals()
+        loadBudgets()
     }
 
-    /*** metodo para obtener las transacciones de firestore y actualizo la UI*/
-    private fun cargarTransacciones(){
-
-        viewModelScope.launch {
+    // Load transactions from Firestore
+    private fun loadTransactions() {
+        viewModelScope.launch(Dispatchers.IO) {
             FireStoreUtil.obtenerTransacciones(
-                onSuccess = { transacciones ->
+                onSuccess = { transactions ->
+                    val ingresos = transactions.filter { it.tipo == "ingreso" }
+                    val gastos = transactions.filter { it.tipo == "gasto" }
+
                     _uiState.update { currentState ->
                         currentState.copy(
-                            ingresos = transacciones.filter { it.tipo == "ingreso" },
-                            gastos = transacciones.filter { it.tipo == "gasto" },
-                            transaccionesFiltradas = transacciones
+                            ingresos = ingresos,
+                            gastos = gastos
                         )
                     }
                 },
-                onFailure = {}
+                onFailure = { exception ->
+                    Log.e("TransactionViewModel", "Error loading transactions: ${exception.message}")
+                }
             )
         }
     }
 
-    /**metodo para calcular el balance diario basado en la fecha seleccionada*/
-    fun calcularBalanceDiario(fecha: LocalDate): Float {
-
-        //filtro los ingresos y gastos diarios
-        val ingresosDelDia = filtrarTransacciones(fecha, "ingresos").sumOf { it.cantidad.toFloat() }
-        val gastosDelDia = filtrarTransacciones(fecha, "gastos").sumOf { it.cantidad.toFloat() }
-
-        return ingresosDelDia - gastosDelDia
+    // Load financial goals from Firestore
+    private fun loadFinancialGoals() {
+        viewModelScope.launch(Dispatchers.IO) {
+            FireStoreUtil.getFinancialGoals(
+                onSuccess = { goals ->
+                    _financialGoalState.value = goals
+                },
+                onFailure = { exception ->
+                    Log.e("TransactionViewModel", "Error loading financial goals: ${exception.message}")
+                }
+            )
+        }
     }
 
-    /**metodo para filtrar las transacciones por tipo en base a sus fechas**/
-    fun filtrarTransacciones(fecha: LocalDate, tipo: String): List<TransactionUiState> {
+    // Load budgets from Firestore
+    private fun loadBudgets() {
+        viewModelScope.launch(Dispatchers.IO) {
+            FireStoreUtil.getBudgets(
+                onSuccess = { budgets ->
+                    _budgetState.value = budgets
+                },
+                onFailure = { exception ->
+                    Log.e("TransactionViewModel", "Error loading budgets: ${exception.message}")
+                }
+            )
+        }
+    }
 
+    // Method to filter transactions by date
+    fun filtrarTransacciones(fecha: LocalDate, tipo: String): List<TransactionUiState> {
         val fechaString = fecha.format(DateTimeFormatter.ISO_DATE)
 
         return when (tipo) {
@@ -89,24 +106,18 @@ class TransactionViewModel : ViewModel() {
         }
     }
 
-    /**metodo para exportar las transacciones en un CSV**/
+    // Method to export transactions to CSV
     fun exportarTransaccionesCSV(context: Context, uri: Uri) {
-
         viewModelScope.launch {
             try {
-                //obtengo las transacciones de ingresos y gastos
                 val transacciones = uiState.value.ingresos + uiState.value.gastos
 
-                //creo el contenido del CSV
                 val datosCSV = StringBuilder()
-
-                //encabezados del CSV
                 datosCSV.append("Tipo,Categoría,Cantidad,Fecha\n")
                 transacciones.forEach { transaccion ->
                     datosCSV.append("${transaccion.tipo},${transaccion.categoria},${transaccion.cantidad},${transaccion.fecha}\n")
                 }
 
-                //escribo el archivo CSV
                 context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                     outputStream.write(datosCSV.toString().toByteArray())
                     outputStream.flush()
@@ -118,7 +129,30 @@ class TransactionViewModel : ViewModel() {
             }
         }
     }
+
+    // Method to delete a transaction
+    fun eliminarTransaccion(context: Context, transaccion: TransactionUiState) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val coleccion = if (transaccion.tipo == "ingreso") "ingresos" else "gastos"
+            FireStoreUtil.eliminarTransaccion(
+                coleccion = coleccion,
+                transaccionId = transaccion.id ?: return@launch,
+                onSuccess = {
+                    // Reload transactions after deletion
+                    loadTransactions()
+
+                    // Show success toast on main thread
+                    launch(Dispatchers.Main) {
+                        Toast.makeText(context, "Transacción eliminada correctamente", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onFailure = { exception ->
+                    // Show error toast on main thread
+                    launch(Dispatchers.Main) {
+                        Toast.makeText(context, "Error al eliminar la transacción: ${exception.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
+        }
+    }
 }
-
-
-

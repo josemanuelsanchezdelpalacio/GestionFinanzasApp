@@ -238,3 +238,5 @@ class CalculadoraViewModel : ViewModel() {
         return (this * factor).roundToInt() / factor
     }
 }
+
+

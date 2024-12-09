@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dam2jms.gestiongastosapp.data.NewsApiService
 import com.dam2jms.gestiongastosapp.states.ReminderType
+import com.dam2jms.gestiongastosapp.states.TransactionUiState
 import com.dam2jms.gestiongastosapp.states.UiState
 import com.dam2jms.gestiongastosapp.utils.FireStoreUtil
 import com.google.firebase.auth.ktx.BuildConfig
@@ -42,7 +43,6 @@ class HomeViewModel : ViewModel() {
     init {
         viewModelScope.launch {
             leerTransacciones()
-            cargarMetaFinanciera()
         }
     }
 
@@ -139,35 +139,6 @@ class HomeViewModel : ViewModel() {
         )
     }
 
-    private fun cargarMetaFinanciera() {
-        val userId = Firebase.auth.currentUser?.uid ?: return
-        db.collection("users").document(userId).get()
-            .addOnSuccessListener { document ->
-                if (document.exists()) {
-                    val metaFinanciera = document.getDouble("metaFinanciera") ?: 0.0
-                    val fechaMeta = document.getString("fechaMeta")?.let {
-                        try {
-                            LocalDate.parse(it)
-                        } catch (e: Exception) {
-                            null
-                        }
-                    }
-                    val metaId = document.getString("financialGoalId") ?: ""
-                    _uiState.update { currentState ->
-                        currentState.copy(
-                            objetivoFinanciero = metaFinanciera,
-                            fechaObjetivo = fechaMeta,
-                            idObjetivoFinanciero = metaId
-                        )
-                    }
-                    fechaMeta?.let { establecerFechaMeta(it) }
-                }
-            }
-            .addOnFailureListener { e ->
-                Log.e("HomeViewModel", "Error al cargar la meta financiera: ${e.message}")
-            }
-    }
-
     private fun actualizarBalances() {
         val ingresosTotales = _uiState.value.ingresos.sumOf { it.cantidad }
         val gastosTotales = _uiState.value.gastos.sumOf { it.cantidad }
@@ -239,116 +210,6 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    fun establecerMetaFinanciera(meta: Double, fechaMeta: LocalDate) {
-        _uiState.update {
-            it.copy(
-                objetivoFinanciero = meta,
-                fechaObjetivo = fechaMeta,
-                diasHastaMeta = ChronoUnit.DAYS.between(LocalDate.now(), fechaMeta).toInt()
-            )
-        }
-        actualizarBalances()
-        guardarMetaEnFirebase(meta, fechaMeta)
-    }
-
-    private fun guardarMetaEnFirebase(meta: Double, fechaMeta: LocalDate) {
-        val userId = Firebase.auth.currentUser?.uid ?: return
-        db.collection("users").document(userId)
-            .update(mapOf("metaFinanciera" to meta, "fechaMeta" to fechaMeta.toString()))
-            .addOnFailureListener { e ->
-                Log.e("HomeViewModel", "Error al guardar meta en Firebase: ${e.message}")
-            }
-    }
-
-    @RequiresApi(Build.VERSION_CODES.O)
-    fun establecerFechaMeta(fechaMeta: LocalDate) {
-        val metaFinanciera = _uiState.value.objetivoFinanciero
-        if (metaFinanciera <= 0) {
-            _uiState.update {
-                it.copy(
-                    fechaObjetivo = fechaMeta,
-                    diasHastaMeta = -1,
-                    estadoMeta = "Establece primero una meta financiera"
-                )
-            }
-            return
-        }
-        val diasDiferencia = ChronoUnit.DAYS.between(LocalDate.now(), fechaMeta).toInt()
-        if (diasDiferencia <= 0) {
-            _uiState.update {
-                it.copy(
-                    fechaObjetivo = fechaMeta,
-                    diasHastaMeta = -1,
-                    estadoMeta = "La fecha meta debe ser posterior a hoy"
-                )
-            }
-            return
-        }
-        val ahorroNecesarioTotal = metaFinanciera - _uiState.value.balanceTotal
-        val ahorroDiarioNecesario = ahorroNecesarioTotal / diasDiferencia
-        val estadoMeta = when {
-            ahorroNecesarioTotal <= 0 -> "Has alcanzado tu objetivo"
-            else -> "Debes ahorrar ${String.format("%.2f", ahorroDiarioNecesario)} diarios para alcanzar tu meta"
-        }
-        _uiState.update {
-            it.copy(
-                fechaObjetivo = fechaMeta,
-                diasHastaMeta = diasDiferencia,
-                ahorroDiarioNecesario = ahorroDiarioNecesario,
-                progresoMeta = calcularProgresoMeta(),
-                estadoMeta = estadoMeta
-            )
-        }
-        actualizarMetaEnFirebase(fechaMeta)
-    }
-
-    private fun actualizarMetaEnFirebase(fechaMeta: LocalDate) {
-        val userId = Firebase.auth.currentUser?.uid ?: return
-        db.collection("users").document(userId)
-            .update(
-                mapOf(
-                    "fechaMeta" to fechaMeta.toString(),
-                    "diasHastaMeta" to _uiState.value.diasHastaMeta,
-                    "ahorroDiarioNecesario" to _uiState.value.ahorroDiarioNecesario,
-                    "progresoMeta" to _uiState.value.progresoMeta
-                )
-            )
-            .addOnFailureListener { e ->
-                Log.e("HomeViewModel", "Error al actualizar la meta en Firebase: ${e.message}")
-            }
-    }
-
-    fun eliminarMeta(context: Context) {
-        val idUsuario = Firebase.auth.currentUser?.uid
-        if (idUsuario == null) {
-            Toast.makeText(context, "Usuario no autenticado", Toast.LENGTH_SHORT).show()
-            return
-        }
-        // Actualizo el estado local
-        _uiState.update { currentState ->
-            currentState.copy(
-                objetivoFinanciero = 0.0,
-                fechaObjetivo = null,
-                diasHastaMeta = -1,
-                estadoMeta = "",
-                ahorroDiarioNecesario = 0.0,
-                progresoMeta = 0.0,
-                idObjetivoFinanciero = ""
-            )
-        }
-        // Actualizo Firestore
-        FireStoreUtil.eliminarMetaFinanciera(
-            idUsuario = idUsuario,
-            onSuccess = {
-                Toast.makeText(context, "Meta eliminada con éxito", Toast.LENGTH_SHORT).show()
-            },
-            onFailure = { e ->
-                Toast.makeText(context, "Error al eliminar la meta: ${e.message}", Toast.LENGTH_SHORT).show()
-                cargarMetaFinanciera()
-            }
-        )
-    }
-
     fun actualizarMoneda(nuevaMoneda: String) {
         viewModelScope.launch {
             val tasaCambio = try {
@@ -373,35 +234,6 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    // Extension to HomeViewModel to handle reminders
-    fun agregarRecordatorio(
-        fecha: LocalDate,
-        descripcion: String,
-        monto: Double,
-        tipo: ReminderType
-    ) {
-        // Implement logic to save reminder to Firebase or local storage
-        val userId = Firebase.auth.currentUser?.uid ?: return
-
-        val recordatorio = hashMapOf(
-            "fecha" to fecha.toString(),
-            "descripcion" to descripcion,
-            "monto" to monto,
-            "tipo" to tipo.name,
-            "usuarioId" to userId,
-            "timestamp" to FieldValue.serverTimestamp()
-        )
-
-        Firebase.firestore.collection("recordatorios")
-            .add(recordatorio)
-            .addOnSuccessListener { documentReference ->
-                // Optional: Handle successful addition of reminder
-                Log.d("AgregarRecordatorio", "Recordatorio añadido con ID: ${documentReference.id}")
-            }
-            .addOnFailureListener { e ->
-                // Optional: Handle failure in adding reminder
-                Log.e("AgregarRecordatorio", "Error al añadir recordatorio", e)
-            }
-    }
 }
+
 

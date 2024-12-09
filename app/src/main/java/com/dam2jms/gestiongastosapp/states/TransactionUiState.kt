@@ -15,9 +15,3 @@ data class TransactionUiState(
     val descripcion: String = ""
 )
 
-data class TransactionFilterState(
-    val tipoFiltro: String? = null,
-    val categoriaFiltro: String? = null,
-    val fechaInicio: LocalDate? = null,
-    val fechaFin: LocalDate? = null
-)
