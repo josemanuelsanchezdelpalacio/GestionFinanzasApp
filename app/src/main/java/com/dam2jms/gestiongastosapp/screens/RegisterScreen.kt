@@ -35,7 +35,6 @@ fun RegisterScreen(
     navController: NavController
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -63,8 +62,11 @@ fun RegisterScreen(
                 onRegister = { email, password, username ->
                     viewModel.registroConEmail(email, password, username)
                 },
+                onEmailChange = viewModel::updateEmail,
+                onPasswordChange = viewModel::updatePassword,
+                onUsernameChange = viewModel::updateUsername,
                 onLogin = {
-                    navController.navigate(AppScreen.LoginScreen.route) // Navigate to login screen
+                    navController.navigate(AppScreen.LoginScreen.route) // Navegar a la pantalla de inicio de sesión
                 }
             )
         }
@@ -76,9 +78,11 @@ fun RegisterScreen(
 fun RegisterBodyScreen(
     uiState: UiState,
     onRegister: (String, String, String) -> Unit,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onUsernameChange: (String) -> Unit,
     onLogin: () -> Unit
 ) {
-    // State for managing visibility of password
     var isPasswordVisible by remember { mutableStateOf(uiState.visibilidadPassword) }
 
     Column(
@@ -88,7 +92,6 @@ fun RegisterBodyScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Icon
         Box(
             modifier = Modifier
                 .size(100.dp)
@@ -105,10 +108,10 @@ fun RegisterBodyScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Username field
+        // Nombre de usuario
         OutlinedTextField(
             value = uiState.email,
-            onValueChange = { uiState.email = it },
+            onValueChange = onUsernameChange,
             label = { Text("Nombre de usuario", color = blanco) },
             leadingIcon = {
                 Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = naranjaClaro)
@@ -124,10 +127,10 @@ fun RegisterBodyScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Email field
+        // Correo electrónico
         OutlinedTextField(
             value = uiState.email,
-            onValueChange = { uiState.email = it },
+            onValueChange = onEmailChange,
             label = { Text("Correo electrónico", color = blanco) },
             leadingIcon = {
                 Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = naranjaClaro)
@@ -143,10 +146,10 @@ fun RegisterBodyScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Password field
+        // Contraseña
         OutlinedTextField(
             value = uiState.password,
-            onValueChange = { uiState.password = it },
+            onValueChange = onPasswordChange,
             label = { Text("Contraseña", color = blanco) },
             leadingIcon = {
                 Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = naranjaClaro)
@@ -155,13 +158,13 @@ fun RegisterBodyScreen(
                 IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                     Icon(
                         imageVector = if (isPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                        contentDescription = if (isPasswordVisible) "Ocultar contraseña" else "Mostrar contraseña",
+                        contentDescription = null,
                         tint = grisClaro
                     )
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
             visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
             colors = TextFieldDefaults.outlinedTextFieldColors(
                 focusedBorderColor = naranjaClaro,
                 unfocusedBorderColor = grisClaro,
@@ -172,15 +175,14 @@ fun RegisterBodyScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Register button
         Button(
-            onClick = { onRegister(uiState.email, uiState.password, "") }, // Modify to include username input if needed
-            enabled = uiState.email.isNotBlank() && uiState.password.isNotBlank(),
+            onClick = { onRegister(uiState.email, uiState.password, uiState.email) },
+            enabled = uiState.email.isNotBlank() && uiState.password.isNotBlank() && uiState.email.isNotBlank(),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (uiState.email.isNotBlank() && uiState.password.isNotBlank()) naranjaClaro else grisClaro,
+                containerColor = naranjaClaro,
                 contentColor = Color.Black
             )
         ) {
@@ -189,17 +191,10 @@ fun RegisterBodyScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Login navigation button
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            TextButton(onClick = onLogin) {
-                Text(text = "¿Ya tienes una cuenta? Inicia sesión", color = naranjaClaro)
-            }
+        TextButton(onClick = onLogin) {
+            Text(text = "¿Ya tienes una cuenta? Inicia sesión", color = naranjaClaro)
         }
 
-        // Error message if any
         if (uiState.error.isNotBlank()) {
             Spacer(modifier = Modifier.height(16.dp))
             Text(text = uiState.error, color = Color.Red)

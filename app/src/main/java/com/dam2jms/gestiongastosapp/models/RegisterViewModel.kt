@@ -23,9 +23,23 @@ class RegisterViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    //registro con email y password
-    fun registroConEmail(email: String, password: String, username: String) {
+    // Actualizar el email en el estado
+    fun updateEmail(email: String) {
+        _uiState.value = _uiState.value.copy(email = email)
+    }
 
+    // Actualizar la contraseña en el estado
+    fun updatePassword(password: String) {
+        _uiState.value = _uiState.value.copy(password = password)
+    }
+
+    // Actualizar el nombre de usuario en el estado
+    fun updateUsername(username: String) {
+        _uiState.value = _uiState.value.copy(email = username)
+    }
+
+    // Registro con email y password
+    fun registroConEmail(email: String, password: String, username: String) {
         if (!validateRegistrationInputs(email, password, username)) return
 
         viewModelScope.launch {
@@ -34,9 +48,9 @@ class RegisterViewModel : ViewModel() {
                 resultado.user?.let { user ->
                     initializeNewUser(user, username)
                 }
-                _uiState.value = UiState(error = "")
+                _uiState.value = UiState(error = "") // Limpiar errores
             } catch (e: Exception) {
-                _uiState.value = UiState(error = "Registration failed: ${e.localizedMessage}")
+                _uiState.value = _uiState.value.copy(error = "Registration failed: ${e.localizedMessage}")
             }
         }
     }
@@ -45,18 +59,18 @@ class RegisterViewModel : ViewModel() {
     private fun validateRegistrationInputs(email: String, password: String, username: String): Boolean {
         return when {
             email.isBlank() || password.isBlank() || username.isBlank() -> {
-                _uiState.value = UiState(error = "All fields are required.")
+                _uiState.value = _uiState.value.copy(error = "All fields are required.")
                 false
             }
             password.length < 6 -> {
-                _uiState.value = UiState(error = "Password must be at least 6 characters long.")
+                _uiState.value = _uiState.value.copy(error = "Password must be at least 6 characters long.")
                 false
             }
             else -> true
         }
     }
 
-    //inicializacion de nuevos usuarios en Firestore
+    // Inicializar nuevo usuario en Firestore
     private suspend fun initializeNewUser(user: FirebaseUser?, username: String) {
         user?.let {
             val userMap = mapOf(
@@ -68,4 +82,3 @@ class RegisterViewModel : ViewModel() {
         }
     }
 }
-
