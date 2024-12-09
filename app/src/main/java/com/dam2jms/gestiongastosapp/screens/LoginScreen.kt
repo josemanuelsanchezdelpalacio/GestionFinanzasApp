@@ -38,7 +38,6 @@ import com.dam2jms.gestiongastosapp.ui.theme.naranjaClaro
 import com.dam2jms.gestiongastosapp.ui.theme.colorFondo
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 
-@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
@@ -49,39 +48,29 @@ fun LoginScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    // Launcher para manejar el resultado del intent de Google Sign-In
+    // Para Google Sign-In
     val googleSignInLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         viewModel.handleGoogleSignInResult(
             result = result,
-            onSuccess = {
-                // Navegar a la pantalla principal si el inicio de sesión es exitoso
-                navController.navigate(AppScreen.HomeScreen.route)
-            },
-            onFailure = { error ->
-                // Mostrar mensaje de error en un Toast
-                Toast.makeText(context, error, Toast.LENGTH_LONG).show()
-            }
+            onSuccess = { navController.navigate(AppScreen.HomeScreen.route) },
+            onFailure = { error -> Toast.makeText(context, error, Toast.LENGTH_LONG).show() }
         )
     }
 
-    // State to control the visibility of the AlertDialog
+    // Variables locales para los campos de entrada
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+
     var showDialog by remember { mutableStateOf(false) }
     var emailInput by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        "Iniciar sesión",
-                        color = blanco,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colorFondo),
-                modifier = Modifier.shadow(4.dp)
+                title = { Text("Iniciar sesión", color = blanco, style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)) },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = colorFondo)
             )
         }
     ) { paddingValues ->
@@ -92,32 +81,30 @@ fun LoginScreen(
                 .background(colorFondo)
         ) {
             LoginBodyScreen(
-                uiState = uiState,
-                onEmailPasswordLogin = { email, password ->
-                    viewModel.loginConCorreo(email, password)
+                email = email,
+                password = password,
+                onEmailChange = { email = it },
+                onPasswordChange = { password = it },
+                onEmailPasswordLogin = {
+                    viewModel.loginConCorreo(
+                        email = email,
+                        password = password,
+                        onSuccess = { navController.navigate(AppScreen.HomeScreen.route) },
+                        onFailure = { error -> Toast.makeText(context, error, Toast.LENGTH_LONG).show() }
+                    )
                 },
-                onGoogleSignIn = {
-                    // Lanzar el intent de Google Sign-In
-                    val signInIntent = googleSignInClient.signInIntent
-                    googleSignInLauncher.launch(signInIntent)
-                },
-                onForgotPassword = {
-                    // Show the AlertDialog to reset the password
-                    showDialog = true
-                },
-                onCreateAccount = {
-                    navController.navigate(AppScreen.RegisterScreen.route)
-                }
+                onGoogleSignIn = { googleSignInLauncher.launch(googleSignInClient.signInIntent) },
+                onForgotPassword = { showDialog = true },
+                onCreateAccount = { navController.navigate(AppScreen.RegisterScreen.route) }
             )
 
-            // AlertDialog for password reset
             if (showDialog) {
                 AlertDialog(
                     onDismissRequest = { showDialog = false },
                     title = { Text(text = "Restablecer contraseña") },
                     text = {
                         Column {
-                            Text("Por favor ingrese su correo electrónico para restablecer la contraseña:")
+                            Text("Ingrese su correo electrónico para restablecer la contraseña:")
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedTextField(
                                 value = emailInput,
@@ -151,14 +138,16 @@ fun LoginScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginBodyScreen(
-    uiState: UiState,
-    onEmailPasswordLogin: (String, String) -> Unit,
+    email: String,
+    password: String,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onEmailPasswordLogin: () -> Unit,
     onGoogleSignIn: () -> Unit,
     onForgotPassword: () -> Unit,
     onCreateAccount: () -> Unit
 ) {
-    // Estado para controlar la visibilidad de la contraseña
-    var isPasswordVisible by remember { mutableStateOf(uiState.visibilidadPassword) }
+    var isPasswordVisible by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -167,7 +156,6 @@ fun LoginBodyScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Icono central
         Box(
             modifier = Modifier
                 .size(100.dp)
@@ -184,14 +172,11 @@ fun LoginBodyScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Campo de email
         OutlinedTextField(
-            value = uiState.email,
-            onValueChange = { uiState.email = it },
+            value = email,
+            onValueChange = onEmailChange,
             label = { Text(text = "Email", color = blanco) },
-            leadingIcon = {
-                Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = naranjaClaro)
-            },
+            leadingIcon = { Icon(imageVector = Icons.Default.Email, contentDescription = null, tint = naranjaClaro) },
             modifier = Modifier.fillMaxWidth(),
             colors = TextFieldDefaults.outlinedTextFieldColors(
                 focusedBorderColor = naranjaClaro,
@@ -203,14 +188,11 @@ fun LoginBodyScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Campo de contraseña
         OutlinedTextField(
-            value = uiState.password,
-            onValueChange = { uiState.password = it },
+            value = password,
+            onValueChange = onPasswordChange,
             label = { Text(text = "Contraseña", color = blanco) },
-            leadingIcon = {
-                Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = naranjaClaro)
-            },
+            leadingIcon = { Icon(imageVector = Icons.Default.Lock, contentDescription = null, tint = naranjaClaro) },
             trailingIcon = {
                 IconButton(onClick = { isPasswordVisible = !isPasswordVisible }) {
                     Icon(
@@ -232,15 +214,13 @@ fun LoginBodyScreen(
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Botón para iniciar sesión
         Button(
-            onClick = { onEmailPasswordLogin(uiState.email, uiState.password) },
-            enabled = uiState.email.isNotBlank() && uiState.password.isNotBlank(),
+            onClick = onEmailPasswordLogin,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = if (uiState.email.isNotBlank() && uiState.password.isNotBlank()) naranjaClaro else grisClaro,
+                containerColor = if (email.isNotBlank() && password.isNotBlank()) naranjaClaro else grisClaro,
                 contentColor = Color.Black
             )
         ) {
@@ -249,7 +229,6 @@ fun LoginBodyScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Botón de Google Sign-In
         OutlinedButton(
             onClick = onGoogleSignIn,
             modifier = Modifier
@@ -287,4 +266,3 @@ fun LoginBodyScreen(
         }
     }
 }
-

@@ -27,8 +27,8 @@ import com.dam2jms.gestiongastosapp.navigation.AppScreen
 import com.dam2jms.gestiongastosapp.states.UiState
 import com.dam2jms.gestiongastosapp.ui.theme.*
 
-@RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
+@RequiresApi(Build.VERSION_CODES.O)
 @Composable
 fun RegisterScreen(
     viewModel: RegisterViewModel,
@@ -61,6 +61,7 @@ fun RegisterScreen(
                 uiState = uiState,
                 onRegister = { email, password, username ->
                     viewModel.registroConEmail(email, password, username)
+                    navController.navigate(AppScreen.HomeScreen.route) // Navegar a HomeScreen después del registro
                 },
                 onEmailChange = viewModel::updateEmail,
                 onPasswordChange = viewModel::updatePassword,
@@ -110,7 +111,7 @@ fun RegisterBodyScreen(
 
         // Nombre de usuario
         OutlinedTextField(
-            value = uiState.email,
+            value = uiState.username, // Cambiado de 'email' a 'username'
             onValueChange = onUsernameChange,
             label = { Text("Nombre de usuario", color = blanco) },
             leadingIcon = {

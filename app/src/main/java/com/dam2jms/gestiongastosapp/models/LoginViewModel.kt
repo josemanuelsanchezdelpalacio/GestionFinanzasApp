@@ -16,64 +16,64 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-@RequiresApi(Build.VERSION_CODES.O)
 class LoginViewModel : ViewModel() {
     private val auth = FirebaseAuth.getInstance()
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    fun loginConCorreo(email: String, password: String) {
+    fun loginConCorreo(email: String, password: String, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
         if (email.isBlank() || password.isBlank()) {
-            _uiState.value = UiState(error = "Los campos no pueden estar vacios")
+            _uiState.value = _uiState.value.copy(error = "Los campos no pueden estar vacíos")
             return
         }
 
         viewModelScope.launch {
             try {
                 auth.signInWithEmailAndPassword(email, password).await()
+                _uiState.value = _uiState.value.copy(error = "")
+                onSuccess()
             } catch (e: Exception) {
-                _uiState.value = UiState(error = "Error al loguearse: ${e.message}")
+                onFailure("Error al iniciar sesión: ${e.message}")
             }
         }
     }
 
     fun resetPassword(email: String) {
-
         if (email.isBlank()) {
-            _uiState.value = UiState(error = "El correo no puede estar vacio")
+            _uiState.value = _uiState.value.copy(error = "El correo no puede estar vacío")
             return
         }
 
         viewModelScope.launch {
             try {
                 auth.sendPasswordResetEmail(email).await()
+                _uiState.value = _uiState.value.copy(error = "Correo enviado exitosamente.")
             } catch (e: Exception) {
-                _uiState.value = UiState(error = "Error al resetear la contraseña: ${e.message}")
+                _uiState.value = _uiState.value.copy(error = "Error al resetear contraseña: ${e.message}")
             }
         }
     }
 
     fun handleGoogleSignInResult(result: ActivityResult, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
-
         viewModelScope.launch {
             try {
-                // Obteniendo el resultado de la cuenta de Google desde el Intent
                 val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
                 val account = task.getResult(ApiException::class.java)
 
-                // Creando credenciales para Firebase Authentication
-                val credential = GoogleAuthProvider.getCredential(account.idToken, null)
+                if (account?.idToken == null) {
+                    onFailure("Error: Token de Google es nulo.")
+                    return@launch
+                }
 
-                // Autenticación en Firebase con las credenciales obtenidas
+                val credential = GoogleAuthProvider.getCredential(account.idToken, null)
                 auth.signInWithCredential(credential).await()
 
-                // Navegación exitosa
                 onSuccess()
             } catch (e: ApiException) {
-                onFailure("Error al obtener la cuenta de Google: ${e.localizedMessage}")
+                onFailure("Error al obtener cuenta de Google: ${e.localizedMessage}")
             } catch (e: Exception) {
-                onFailure("Error de inicio de sesión: ${e.localizedMessage}")
+                onFailure("Error de autenticación: ${e.localizedMessage}")
             }
         }
     }

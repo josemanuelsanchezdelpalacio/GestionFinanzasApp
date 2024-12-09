@@ -11,6 +11,7 @@ import java.time.format.DateTimeFormatter
 data class UiState(
 
     // Autenticación
+    var username: String = "",
     var email: String = "",
     var password: String = "",
     var visibilidadPassword: Boolean = false,

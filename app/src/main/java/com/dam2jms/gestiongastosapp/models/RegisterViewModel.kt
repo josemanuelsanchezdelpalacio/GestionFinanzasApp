@@ -23,6 +23,10 @@ class RegisterViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
+    fun updateUsername(username: String) {
+        _uiState.value = _uiState.value.copy(username = username) // Corregido para usar 'username'
+    }
+
     // Actualizar el email en el estado
     fun updateEmail(email: String) {
         _uiState.value = _uiState.value.copy(email = email)
@@ -31,11 +35,6 @@ class RegisterViewModel : ViewModel() {
     // Actualizar la contraseña en el estado
     fun updatePassword(password: String) {
         _uiState.value = _uiState.value.copy(password = password)
-    }
-
-    // Actualizar el nombre de usuario en el estado
-    fun updateUsername(username: String) {
-        _uiState.value = _uiState.value.copy(email = username)
     }
 
     // Registro con email y password
